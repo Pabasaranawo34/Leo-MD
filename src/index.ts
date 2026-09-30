@@ -1,4 +1,13 @@
-import "./web.js";
+import {
+  setDeviceQR,
+  setDeviceStatus,
+  setPairHandler,
+} from "./web.js";
+import {
+  createSupabaseAuthState,
+  deleteSupabaseAuthState,
+  listPersistedDeviceIds,
+} from "./supabase-auth.js";
 import "dotenv/config";
 
 
@@ -39,7 +48,6 @@ import makeWASocket, {
 
 
 
-  useMultiFileAuthState,
 
 
 
@@ -104,6 +112,13 @@ import pino from "pino";
 
 
 import Database from "better-sqlite3";
+import {
+  flushDatabasePersistence,
+  loadCloudOwner,
+  restoreDatabaseFromSupabase,
+  saveCloudOwner,
+  startDatabasePersistence,
+} from "./supabase-db-persistence.js";
 
 import { spawn } from "node:child_process";
 
@@ -341,10 +356,25 @@ const TRANSCRIPTION_MODEL =
 
 async function loadSavedOwner(): Promise<void> {
   if (OWNER_NUMBER) return;
+
+  try {
+    const cloudOwner = await loadCloudOwner();
+    if (cloudOwner) {
+      OWNER_NUMBER = cloudOwner.replace(/\D/g, "");
+      return;
+    }
+  } catch (error) {
+    console.error("⚠️ Could not load owner from Supabase:", error);
+  }
+
   try {
     const raw = await readFile(OWNER_FILE, "utf8");
     const saved = JSON.parse(raw) as { ownerNumber?: string };
     OWNER_NUMBER = saved.ownerNumber?.replace(/\D/g, "") || "";
+
+    if (OWNER_NUMBER) {
+      await saveCloudOwner(OWNER_NUMBER);
+    }
   } catch {}
 }
 
@@ -352,8 +382,19 @@ async function saveOwner(number: string): Promise<void> {
   const normalized = number.replace(/\D/g, "");
   if (!normalized) return;
   OWNER_NUMBER = normalized;
+
   await mkdir("./data", { recursive: true });
-  await writeFile(OWNER_FILE, JSON.stringify({ ownerNumber: normalized }, null, 2), "utf8");
+  await writeFile(
+    OWNER_FILE,
+    JSON.stringify({ ownerNumber: normalized }, null, 2),
+    "utf8"
+  );
+
+  try {
+    await saveCloudOwner(normalized);
+  } catch (error) {
+    console.error("⚠️ Could not save owner to Supabase:", error);
+  }
 }
 
 // ============================================================
@@ -388,7 +429,11 @@ async function saveOwner(number: string): Promise<void> {
 
 
 
-const db = new Database("./data/leo.db");
+const DB_PATH = "./data/leo.db";
+
+await restoreDatabaseFromSupabase(DB_PATH);
+
+const db = new Database(DB_PATH);
 
 
 
@@ -698,6 +743,7 @@ db.exec(`
 `);
 
 console.log("💾 Database: READY");
+startDatabasePersistence(db, DB_PATH);
 
 
 
@@ -5425,6 +5471,7 @@ async function removeDevice(deviceId: string): Promise<void> {
   if (socket) { try { socket.ws?.close(); } catch {} }
   deviceSockets.delete(deviceId);
   deviceSessions.delete(deviceId);
+  await deleteSupabaseAuthState(deviceId);
   await rm(getDeviceAuthPath(deviceId), { recursive: true, force: true });
 }
 
@@ -5461,45 +5508,11 @@ async function startBot(deviceId: string = "device-1") {
 
 
   const {
-
-
-
-
-
-
-
     state,
-
-
-
-
-
-
-
     saveCreds,
-
-
-
-
-
-
-
-  } = await useMultiFileAuthState(
-
-
-
-
-
-
-
+  } = await createSupabaseAuthState(
+    deviceId,
     getDeviceAuthPath(deviceId)
-
-
-
-
-
-
-
   );
 
 
@@ -5787,61 +5800,18 @@ async function startBot(deviceId: string = "device-1") {
       if (qr) {
         console.log(`📱 [${deviceId}] Scan this QR code:`);
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         qrcode.generate(qr, {
-
-
-
-
-
-
-
           small: true,
-
-
-
-
-
-
-
         });
 
-
-
-
-
-
-
+        setDeviceQR(qr, deviceId);
+        setDeviceStatus("waiting_for_pairing", deviceId);
       }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
       if (connection === "open") {
+        setDeviceStatus("online", deviceId);
+
         const loggedInNumber = sock.user?.id?.split(":")[0]?.replace(/\D/g, "") || "";
 
         // The first/main paired WhatsApp account becomes the owner when
@@ -6295,6 +6265,8 @@ async function startBot(deviceId: string = "device-1") {
         const deviceInfo = deviceSessions.get(deviceId);
         if (deviceInfo) deviceInfo.status = "offline";
         deviceSockets.delete(deviceId);
+
+        setDeviceStatus("offline", deviceId);
 
         console.log(`❌ [${deviceId}] WhatsApp disconnected.`);
 
@@ -15218,6 +15190,31 @@ async function downloadMedia(
 
 
 // ============================================================
+// BROWSER PAIRING
+// ============================================================
+
+setPairHandler(async () => {
+  const newDeviceId = getNextDeviceId();
+
+  if (deviceSessions.has(newDeviceId)) {
+    throw new Error(`${newDeviceId} is already running.`);
+  }
+
+  setDeviceStatus("starting", newDeviceId);
+
+  void startBot(newDeviceId).catch((error) => {
+    const deviceInfo = deviceSessions.get(newDeviceId);
+    if (deviceInfo) deviceInfo.status = "offline";
+
+    setDeviceStatus("offline", newDeviceId);
+
+    console.error(`❌ ${newDeviceId} BROWSER PAIR ERROR:`, error);
+  });
+
+  return newDeviceId;
+});
+
+// ============================================================
 // START ALL SAVED DEVICES
 // ============================================================
 
@@ -15225,14 +15222,11 @@ async function startAllDevices(): Promise<void> {
   const deviceIds = new Set<string>(["device-1"]);
 
   try {
-    const entries = await readdir("./auth_info", { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.isDirectory() && /^device-\d+$/.test(entry.name)) {
-        deviceIds.add(entry.name);
-      }
+    for (const deviceId of await listPersistedDeviceIds()) {
+      deviceIds.add(deviceId);
     }
-  } catch {
-    // auth_info will be created when device-1 starts.
+  } catch (error) {
+    console.error("❌ Could not load saved devices from Supabase:", error);
   }
 
   for (const deviceId of [...deviceIds].sort((a, b) =>
@@ -15277,6 +15271,18 @@ async function startAllDevices(): Promise<void> {
 
 
 
+
+process.on("SIGTERM", async () => {
+  console.log("🛑 SIGTERM received. Saving Leo MD data to Supabase...");
+  await flushDatabasePersistence(db, DB_PATH);
+  process.exit(0);
+});
+
+process.on("SIGINT", async () => {
+  console.log("🛑 SIGINT received. Saving Leo MD data to Supabase...");
+  await flushDatabasePersistence(db, DB_PATH);
+  process.exit(0);
+});
 
 loadSavedOwner().then(() => startAllDevices()).catch(
 

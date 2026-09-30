@@ -7,12 +7,15 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-
       - key: PORT
         value: "10000"
-
       - key: GROQ_API_KEY
         sync: false
-
       - key: OPENAI_API_KEY
+        sync: false
+      - key: POLLINATIONS_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
         sync: false

@@ -1,118 +1,169 @@
-# ================================
+# ============================================
 # Leo MD - Git Ignore
-# ================================
+# ============================================
 
-# Node.js
+# --------------------------------------------
+# Environment / Secrets
+# --------------------------------------------
+.env
+.env.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+
+# Keep the example environment file
+!.env.example
+
+
+# --------------------------------------------
+# Dependencies
+# --------------------------------------------
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# ================================
-# Environment / Secrets
-# ================================
 
-.env
-.env.local
-.env.development
-.env.test
-.env.production
-.env.*.local
-
-# Keep the example environment file
-!.env.example
-
-# ================================
-# WhatsApp / Baileys Sessions
-# ================================
-
+# --------------------------------------------
+# WhatsApp / Baileys Authentication
+# --------------------------------------------
 auth_info/
-auth_info_*/
-creds.json
-session/
+auth_info/**
 sessions/
+sessions/**
+creds/
+creds/**
 *.session
-*.session-journal
 
-# ================================
-# SQLite / Database
-# ================================
 
-data/*.db
-data/*.db-shm
-data/*.db-wal
+# --------------------------------------------
+# Local Database / Persistent Data
+# IMPORTANT: Supabase stores cloud backup
+# --------------------------------------------
+data/
+data/**
+*.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
-*.sqlite-shm
-*.sqlite-wal
 
-# ================================
-# Downloads / Temporary Files
-# ================================
+# Local database backups
+*.db.backup
+*.db.bak
+*.sqlite.backup
+*.sqlite.bak
 
-downloads/*
-!downloads/.gitkeep
+# Owner information
+data/owner.json
 
-tmp/
-temp/
-cache/
 
-# ================================
+# --------------------------------------------
 # Logs
-# ================================
-
-*.log
+# --------------------------------------------
 logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
 
-# ================================
-# Build / Generated Files
-# ================================
 
+# --------------------------------------------
+# Downloads / Temporary Files
+# --------------------------------------------
+downloads/
+downloads/**
+tmp/
+tmp/**
+temp/
+temp/**
+
+
+# --------------------------------------------
+# Build / Compiled Files
+# --------------------------------------------
 dist/
 build/
-out/
 .next/
-.turbo/
+out/
 coverage/
 
-# ================================
-# TypeScript
-# ================================
 
+# --------------------------------------------
+# TypeScript
+# --------------------------------------------
 *.tsbuildinfo
 
-# ================================
+
+# --------------------------------------------
 # OS Files
-# ================================
-
+# --------------------------------------------
 .DS_Store
+.DS_Store?
 Thumbs.db
-desktop.ini
+ehthumbs.db
+Desktop.ini
 
-# ================================
-# VS Code
-# ================================
 
-.vscode/*
+# --------------------------------------------
+# IDE / Editors
+# --------------------------------------------
+.vscode/
 !.vscode/settings.json
-!.vscode/extensions.json
-
-# ================================
-# Docker
-# ================================
-
-.dockerignore
-
-# ================================
-# Miscellaneous
-# ================================
-
-*.bak
-*.backup
-*.tmp
+.idea/
 *.swp
 *.swo
+*~
 
-# Leo MD owner configuration
-data/owner.json
+
+# --------------------------------------------
+# Testing
+# --------------------------------------------
+.nyc_output/
+coverage/
+
+
+# --------------------------------------------
+# Render / Cloud Temporary Files
+# --------------------------------------------
+.render/
+render-cache/
+
+
+# --------------------------------------------
+# Generated Files
+# --------------------------------------------
+*.tmp
+*.temp
+*.bak
+*.backup
+
+
+# --------------------------------------------
+# ZIP / Archive Files
+# --------------------------------------------
+*.zip
+*.tar
+*.tar.gz
+*.rar
+
+
+# --------------------------------------------
+# Local configuration
+# --------------------------------------------
+*.local
+
+
+# --------------------------------------------
+# Keep important project files
+# --------------------------------------------
+!.gitignore
+!package.json
+!package-lock.json
+!README.md
+!Dockerfile
+!render.yaml
