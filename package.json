@@ -1,0 +1,37 @@
+{
+  "name": "leo-amda-bot",
+  "version": "1.0.0",
+  "description": "Leo AI WhatsApp Bot",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": "22.x"
+  },
+  "dependencies": {
+    "@hapi/boom": "^10.0.1",
+    "@whiskeysockets/baileys": "^7.0.0-rc14",
+    "better-sqlite3": "^13.0.3",
+    "dotenv": "latest",
+    "groq-sdk": "^1.6.0",
+    "openai": "^7.23.0",
+    "pino": "latest",
+    "qrcode-terminal": "latest",
+    "sharp": "^0.35.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "latest",
+    "@types/qrcode-terminal": "^0.12.2",
+    "tsx": "latest",
+    "typescript": "latest"
+  },
+  "allowScripts": {
+    "@whiskeysockets/baileys@7.0.0-rc14": true,
+    "esbuild@0.28.2": true,
+    "protobufjs@7.6.6": true
+  }
+}
