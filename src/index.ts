@@ -6210,9 +6210,6 @@ async function startBot(deviceId: string = "device-1") {
             ([, value]) => value === statusCode
           )?.[0] ?? "unknown";
 
-        const shouldReconnect =
-          statusCode !== DisconnectReason.loggedOut;
-
         const deviceInfo = deviceSessions.get(deviceId);
         if (deviceInfo) deviceInfo.status = "offline";
 
@@ -6227,21 +6224,96 @@ async function startBot(deviceId: string = "device-1") {
         console.error(`📛 Error: ${error?.message ?? "Unknown error"}`);
         console.error("=================================");
 
-        if (shouldReconnect) {
-          console.log(`🔄 [${deviceId}] Reconnecting in 5 seconds...`);
+        // 401 means the WhatsApp session has been logged out.
+        // Clear only this device's saved auth and restart it once so
+        // Baileys can generate a fresh QR code for pairing.
+        if (statusCode === DisconnectReason.loggedOut) {
+          console.log(
+            `🧹 [${deviceId}] Logged-out session detected. Clearing saved auth...`
+          );
+
+          void (async () => {
+            try {
+              await deleteSupabaseAuthState(deviceId);
+              await rm(getDeviceAuthPath(deviceId), {
+                recursive: true,
+                force: true,
+              });
+
+              console.log(
+                `🧹 [${deviceId}] Old authentication removed.`
+              );
+              console.log(
+                `📱 [${deviceId}] Starting fresh pairing session...`
+              );
+
+              setDeviceStatus("waiting_for_pairing", deviceId);
+
+              setTimeout(() => {
+                if (deviceSockets.has(deviceId)) return;
+
+                void startBot(deviceId).catch((restartError) => {
+                  console.error(
+                    `❌ [${deviceId}] FRESH PAIR START ERROR:`,
+                    restartError
+                  );
+                });
+              }, 1000);
+            } catch (clearError) {
+              console.error(
+                `❌ [${deviceId}] Could not clear logged-out auth:`,
+                clearError
+              );
+            }
+          })();
+
+          return;
+        }
+
+        // 440 means another WhatsApp socket replaced this one.
+        // Do NOT reconnect automatically, otherwise two sockets can
+        // repeatedly replace each other.
+        if (statusCode === DisconnectReason.connectionReplaced) {
+          console.log(
+            `⛔ [${deviceId}] Connection was replaced. Automatic reconnect disabled.`
+          );
+          return;
+        }
+
+        // 515 means WhatsApp requires the socket to be restarted.
+        // This is a normal Baileys restart flow, not a logged-out session.
+        if (statusCode === DisconnectReason.restartRequired) {
+          console.log(
+            `🔄 [${deviceId}] WhatsApp requested a socket restart. Restarting in 1 second...`
+          );
 
           setTimeout(() => {
             if (deviceSockets.has(deviceId)) return;
 
-            void startBot(deviceId).catch((error) => {
-              console.error(`❌ [${deviceId}] RECONNECT ERROR:`, error);
+            void startBot(deviceId).catch((restartError) => {
+              console.error(
+                `❌ [${deviceId}] RESTART REQUIRED ERROR:`,
+                restartError
+              );
             });
-          }, 5000);
-        } else {
-          console.log(
-            `❌ [${deviceId}] Logged out. The Supabase session must be removed before pairing again.`
-          );
+          }, 1000);
+
+          return;
         }
+
+        // Other temporary disconnects can reconnect normally.
+        console.log(`🔄 [${deviceId}] Reconnecting in 5 seconds...`);
+
+        setTimeout(() => {
+          if (deviceSockets.has(deviceId)) return;
+
+          void startBot(deviceId).catch((reconnectError) => {
+            console.error(
+              `❌ [${deviceId}] RECONNECT ERROR:`,
+              reconnectError
+            );
+          });
+        }, 5000);
       }
 
 
@@ -6372,46 +6444,25 @@ async function startBot(deviceId: string = "device-1") {
 
 
       try {
-
-
-
-
-
-
-
         const msg = messages[0];
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         if (!msg?.message) {
-
-
-
-
-
-
-
+          console.log(`⚠️ [${deviceId}] messages.upsert received without message content.`);
           return;
-
-
-
-
-
-
-
         }
+
+        // Diagnostic log: confirms that WhatsApp messages are reaching Leo.
+        const incomingPreview =
+          msg.message.conversation ||
+          msg.message.extendedTextMessage?.text ||
+          msg.message.imageMessage?.caption ||
+          msg.message.videoMessage?.caption ||
+          msg.message.documentMessage?.caption ||
+          "";
+
+        console.log(
+          `📩 [${deviceId}] MESSAGE RECEIVED | fromMe=${!!msg.key.fromMe} | jid=${msg.key.remoteJid ?? "unknown"} | text=${JSON.stringify(incomingPreview)}`
+        );
 
 
 
