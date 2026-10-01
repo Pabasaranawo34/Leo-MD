@@ -5501,6 +5501,12 @@ async function removeDevice(deviceId: string): Promise<void> {
 
 async function startBot(deviceId: string = "device-1") {
 
+  // Prevent duplicate WhatsApp sockets for the same device.
+  if (deviceSockets.has(deviceId)) {
+    console.log(`⚠️ [${deviceId}] Socket already exists. Skipping duplicate start.`);
+    return;
+  }
+
 
 
 
@@ -6192,190 +6198,50 @@ async function startBot(deviceId: string = "device-1") {
 
       if (connection === "close") {
 
-
-
-
-
-
-
+        const error = lastDisconnect?.error as any;
         const statusCode =
+          error?.output?.statusCode ??
+          error?.statusCode ??
+          error?.data?.statusCode ??
+          0;
 
-
-
-
-
-
-
-          (lastDisconnect?.error as Boom)
-
-
-
-
-
-
-
-            ?.output?.statusCode;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        const reasonName =
+          Object.entries(DisconnectReason).find(
+            ([, value]) => value === statusCode
+          )?.[0] ?? "unknown";
 
         const shouldReconnect =
-
-
-
-
-
-
-
-          statusCode !==
-
-
-
-
-
-
-
-          DisconnectReason.loggedOut;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+          statusCode !== DisconnectReason.loggedOut;
 
         const deviceInfo = deviceSessions.get(deviceId);
         if (deviceInfo) deviceInfo.status = "offline";
-        deviceSockets.delete(deviceId);
 
+        deviceSockets.delete(deviceId);
         setDeviceStatus("offline", deviceId);
 
-        console.log(`❌ [${deviceId}] WhatsApp disconnected.`);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        console.error("");
+        console.error("=================================");
+        console.error(`❌ [${deviceId}] WhatsApp disconnected`);
+        console.error(`📛 Status code: ${statusCode}`);
+        console.error(`📛 Reason: ${reasonName}`);
+        console.error(`📛 Error: ${error?.message ?? "Unknown error"}`);
+        console.error("=================================");
 
         if (shouldReconnect) {
-
-
-
-
-
-
-
-          console.log(
-
-
-
-
-
-
-
-            "🔄 Reconnecting..."
-
-
-
-
-
-
-
-          );
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+          console.log(`🔄 [${deviceId}] Reconnecting in 5 seconds...`);
 
           setTimeout(() => {
+            if (deviceSockets.has(deviceId)) return;
+
             void startBot(deviceId).catch((error) => {
               console.error(`❌ [${deviceId}] RECONNECT ERROR:`, error);
             });
-          }, 3000);
-
-
-
-
-
-
-
+          }, 5000);
         } else {
-
-
-
-
-
-
-
           console.log(
-
-
-
-
-
-
-
-            `❌ [${deviceId}] Logged out. Delete ${getDeviceAuthPath(deviceId)} and pair again.`
-
-
-
-
-
-
-
+            `❌ [${deviceId}] Logged out. The Supabase session must be removed before pairing again.`
           );
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
       }
 
 
